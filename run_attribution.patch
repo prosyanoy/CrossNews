@@ -1,0 +1,10 @@
+diff --git a/src/run_attribution.py b/src/run_attribution.py
+--- a/src/run_attribution.py
++++ b/src/run_attribution.py
+@@
+         elif args.model == 'selma':
+             from attribution_models.selma import SELMA
+             model = SELMA(args, parameter_set)
++        elif args.model == 'crossid':
++            from attribution_models.crossid import CrossID
++            model = CrossID(args, parameter_set)
