@@ -33,6 +33,9 @@ class CrossID(AttributionModel):
     """
 
     def __init__(self, args, parameter_set):
+        if args.load:
+            with open(Path(args.load_folder) / "crossid_config.json", encoding="utf-8") as f:
+                parameter_set = json.load(f)
         super().__init__(args, parameter_set)
 
         self.train_embedding_loc = parameter_set["train_embedding_loc"]
@@ -48,6 +51,14 @@ class CrossID(AttributionModel):
         self.centroid_weight = float(parameter_set.get("centroid_weight", 0.20))
         self.reference_weight = float(parameter_set.get("reference_weight", 0.25))
 
+        weights = np.array([self.prototype_weight, self.centroid_weight,
+                            self.reference_weight], dtype=np.float64)
+        if not np.isfinite(weights).all() or (weights < 0).any() or weights.sum() <= 0:
+            raise ValueError("CROSS-ID weights must be finite, non-negative, and sum to > 0.")
+        if min(self.num_prototypes, self.prototype_top_k, self.reference_top_k) < 1:
+            raise ValueError("CROSS-ID prototype counts and top-k values must be positive.")
+        self._weights = weights / weights.sum()
+
         self.random_state = int(parameter_set.get("random_state", 1234))
 
         self.id_to_embedding = self._load_embeddings(
@@ -58,11 +69,23 @@ class CrossID(AttributionModel):
         self._author_profiles = None
         self._profile_signature = None
 
-    def _load_embeddings(self, *paths):
+    @staticmethod
+    def _load_embeddings(*paths):
         out = {}
         for path in paths:
             with open(path, "r", encoding="utf-8") as f:
-                out.update(json.load(f))
+                embeddings = json.load(f)
+            if not isinstance(embeddings, dict):
+                raise ValueError(f"Expected a document-id to embedding object in {path}.")
+            for key, value in embeddings.items():
+                vector = np.asarray(value, dtype=np.float32)
+                if vector.ndim != 1 or not vector.size or not np.isfinite(vector).all() or not np.isfinite(np.linalg.norm(vector)) or np.linalg.norm(vector) == 0:
+                    raise ValueError(f"Invalid embedding for document {key} in {path}.")
+                if out and len(vector) != len(next(iter(out.values()))):
+                    raise ValueError(f"Inconsistent embedding dimension for document {key}.")
+                if key in out and not np.array_equal(out[key], vector):
+                    raise ValueError(f"Conflicting embeddings for document {key}; reference and target IDs must not overlap.")
+                out[key] = vector
         return out
 
     def get_model_name(self):
@@ -80,8 +103,8 @@ class CrossID(AttributionModel):
             json.dump(self.parameter_set, f, indent=2)
 
     def load_model(self, folder):
-        # Embedding locations and hyperparameters are read from the model
-        # parameter file, as in SELMA. Nothing trainable is persisted yet.
+        # __init__ restores the saved configuration before initializing the base class.
+        # Profiles are rebuilt from the supplied reference documents.
         return None
 
     def _embedding_for_id(self, doc_id):
@@ -122,11 +145,7 @@ class CrossID(AttributionModel):
 
     def _build_author_profiles(self, query_df):
         # Cache profiles for a given query dataframe shape/content signature.
-        signature = (
-            len(query_df),
-            tuple(sorted(map(int, set(query_df["author"])))),
-            tuple(map(str, query_df["id"].tolist()[:16])),
-        )
+        signature = tuple(zip(query_df["author"].map(int), query_df["id"].map(str)))
         if self._author_profiles is not None and signature == self._profile_signature:
             return self._author_profiles
 
@@ -163,19 +182,7 @@ class CrossID(AttributionModel):
         ref_sims = profile["references"] @ target
         ref_score = self._topk_mean(ref_sims, self.reference_top_k)
 
-        weights = np.asarray(
-            [
-                self.prototype_weight,
-                self.centroid_weight,
-                self.reference_weight,
-            ],
-            dtype=np.float32,
-        )
-        if np.any(weights < 0):
-            raise ValueError("CROSS-ID mixture weights must be non-negative.")
-        if float(weights.sum()) == 0.0:
-            raise ValueError("At least one CROSS-ID mixture weight must be > 0.")
-        weights = weights / weights.sum()
+        weights = self._weights
 
         return float(
             weights[0] * proto_score
@@ -184,6 +191,11 @@ class CrossID(AttributionModel):
         )
 
     def evaluate_internal(self, query_df, target_df, df_name=None):
+        if query_df.empty:
+            raise ValueError("CROSS-ID requires at least one reference document.")
+        overlap = set(query_df["id"].map(str)) & set(target_df["id"].map(str))
+        if overlap:
+            raise ValueError("Reference and target document IDs overlap; benchmark would leak data.")
         profiles = self._build_author_profiles(query_df)
         author_ids = sorted(profiles.keys())
 

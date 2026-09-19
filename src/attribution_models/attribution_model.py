@@ -17,12 +17,12 @@ class AttributionModel(ABC):
         self.parameter_set = parameter_set
         self.args = args
         
-        self.query_df = pd.read_csv(args.query_file)
+        self.query_df = pd.read_csv(args.query_file, dtype={'id': str, 'author': str})
         if args.test:
-            self.target_df = pd.read_csv(args.target_file)
+            self.target_df = pd.read_csv(args.target_file, dtype={'id': str, 'author': str})
             assert set(self.target_df['author']) == (set(self.query_df['author']))
         
-        author_list = set(self.query_df['author'])
+        author_list = sorted(set(self.query_df['author']))
             
         self.author_to_author_id = {author: i for i, author in enumerate(author_list)}
         
@@ -104,13 +104,15 @@ class AttributionModel(ABC):
         
         for i, scores in enumerate(all_scores):
             row = self.target_df.iloc[i]
+            # Stable author-ID ordering breaks ties consistently with prediction.
+            ranking = sorted(range(len(scores)), key=lambda j: (-scores[j], j))
             if all_responses is not None:
                 results.append({
                     'id': str(row['id']),
                     'genre': row['genre'],
                     'label': id_to_author[row['author']],
                     'prediction': id_to_author[scores.index(max(scores))],
-                    'rank': sorted(scores, reverse=True).index(scores[row['author']]) + 1,
+                    'rank': ranking.index(row['author']) + 1,
                     'response': all_responses[i],
                     'scores': scores
                 })
@@ -120,7 +122,7 @@ class AttributionModel(ABC):
                     'genre': row['genre'],
                     'label': id_to_author[row['author']],
                     'prediction': id_to_author[scores.index(max(scores))],
-                    'rank': sorted(scores, reverse=True).index(scores[row['author']]) + 1,
+                    'rank': ranking.index(row['author']) + 1,
                     'scores': scores
                 })
         

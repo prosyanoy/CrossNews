@@ -31,7 +31,7 @@ If you modify any of the file locations, you will also need to modify the corres
 
 """
 
-if 'no_prompt' in sys_args:
+if 'train' in sys_args or 'no_prompt' in sys_args:
     TEST_PROMPT = ''
     prompt_name = 'no_prompt'
 elif 'test_prompt_taskonly' in sys_args:
@@ -43,6 +43,9 @@ elif 'test_prompt_av' in sys_args:
 elif 'test_prompt_lip' in sys_args:
     TEST_PROMPT = 'Instruct: Retrieve stylistically similar text. Analyze the writing styles of the input texts, disregarding the differences in topic and content. Reason based on linguistic features such as phrasal verbs, modal verbs, punctuation, rare words, affixes, quantities, humor, sarcasm, typographical errors, and misspellings.\nQuery:'
     prompt_name = 'test_prompt_lip'
+
+if 'prompt_name' not in globals():
+    raise SystemExit('Specify train, or test with a prompt such as test_prompt_taskonly.')
 
 print(prompt_name)
 

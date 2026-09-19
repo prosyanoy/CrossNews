@@ -23,3 +23,6 @@ test.txt
 matrices.json
 bashes
 table_printing
+# CROSS-ID generated inputs and benchmark outputs
+selma_embeddings/
+results/
