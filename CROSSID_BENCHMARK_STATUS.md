@@ -1,6 +1,9 @@
-# CROSS-ID benchmark execution status
+# Initial CROSS-ID benchmark execution status (historical)
 
-Status: **blocked on precomputed SELMA embeddings; no CrossNews performance results produced.**
+A subsequent GPU run completed successfully; its metrics and manifest are in
+`results/crossid_retry`. The following records the initial execution attempt.
+
+Initial status: **blocked on precomputed SELMA embeddings; no CrossNews performance results produced.**
 
 Implementation base: `64ba26ca1c1ec56cb6dc5505b09d6098659a8f39`.
 

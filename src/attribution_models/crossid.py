@@ -60,6 +60,9 @@ class CrossID(AttributionModel):
         self._weights = weights / weights.sum()
 
         self.random_state = int(parameter_set.get("random_state", 1234))
+        self.profile_mode = parameter_set.get("profile_mode", "pooled")
+        if self.profile_mode not in {"pooled", "genre_prototypes", "genre_balanced", "genre_matched"}:
+            raise ValueError("Unknown CROSS-ID profile_mode.")
 
         self.id_to_embedding = self._load_embeddings(
             self.train_embedding_loc,
@@ -116,13 +119,16 @@ class CrossID(AttributionModel):
             )
         return np.asarray(self.id_to_embedding[key], dtype=np.float32)
 
-    def _make_profile(self, matrix):
+    def _make_profile(self, matrix, num_prototypes=None):
         matrix = _l2_normalize(matrix)
         n = matrix.shape[0]
 
         centroid = _l2_normalize(matrix.mean(axis=0))
 
-        k = min(max(self.num_prototypes, 1), n)
+        k = min(self.num_prototypes if num_prototypes is None else num_prototypes, n)
+        # Centroid/reference ablations do not need an unused KMeans fit.
+        if self.prototype_weight == 0:
+            k = 1
         if k == 1:
             prototypes = centroid[None, :]
         elif k == n:
@@ -145,18 +151,41 @@ class CrossID(AttributionModel):
 
     def _build_author_profiles(self, query_df):
         # Cache profiles for a given query dataframe shape/content signature.
-        signature = tuple(zip(query_df["author"].map(int), query_df["id"].map(str)))
+        signature = tuple(zip(query_df["author"].map(int), query_df["id"].map(str),
+                              query_df["genre"].map(str)))
         if self._author_profiles is not None and signature == self._profile_signature:
             return self._author_profiles
 
         profiles = {}
         for author in sorted(set(query_df["author"])):
             author_rows = query_df[query_df["author"] == author]
-            matrix = np.stack(
-                [self._embedding_for_id(doc_id) for doc_id in author_rows["id"]],
-                axis=0,
-            )
-            profiles[int(author)] = self._make_profile(matrix)
+            if self.profile_mode == "pooled":
+                matrix = np.stack([self._embedding_for_id(doc_id) for doc_id in author_rows["id"]])
+                profiles[int(author)] = self._make_profile(matrix)
+            else:
+                genres = sorted(set(author_rows["genre"]))
+                if not set(genres).issubset({"Article", "Tweet"}):
+                    raise ValueError("Genre-aware CROSS-ID requires Article/Tweet metadata.")
+                if self.num_prototypes < len(genres):
+                    raise ValueError("Prototype budget must allow at least one per reference genre.")
+                # Same total budget as the pooled model. Odd remainders go to
+                # genres in sorted order; the shipped budgets (4/6) divide evenly.
+                budgets = [self.num_prototypes // len(genres) + (i < self.num_prototypes % len(genres))
+                           for i in range(len(genres))]
+                groups = {
+                    genre: self._make_profile(np.stack([
+                        self._embedding_for_id(doc_id)
+                        for doc_id in author_rows.loc[author_rows["genre"] == genre, "id"]]), budget)
+                    for genre, budget in zip(genres, budgets)}
+                if self.profile_mode == "genre_prototypes":
+                    # Isolate prototype allocation: preserve pooled centroid,
+                    # references, and top-k scoring, changing only KMeans groups.
+                    matrix = np.stack([self._embedding_for_id(doc_id) for doc_id in author_rows["id"]])
+                    profile = self._make_profile(matrix, num_prototypes=1)
+                    profile["prototypes"] = np.concatenate([g["prototypes"] for g in groups.values()])
+                    profiles[int(author)] = profile
+                else:
+                    profiles[int(author)] = {"genres": groups}
 
         self._author_profiles = profiles
         self._profile_signature = signature
@@ -171,7 +200,14 @@ class CrossID(AttributionModel):
         idx = np.argpartition(values, -k)[-k:]
         return float(values[idx].mean())
 
-    def _score_profile(self, target, profile):
+    def _score_profile(self, target, profile, target_genre=None):
+        if "genres" in profile:
+            groups = profile["genres"]
+            if self.profile_mode == "genre_matched" and target_genre in groups:
+                return self._score_profile(target, groups[target_genre])
+            # Equal genre weights, independent of reference-document counts.
+            # Single-genre cross-genre trials naturally fall back to that genre.
+            return float(np.mean([self._score_profile(target, group) for group in groups.values()]))
         target = _l2_normalize(target)
 
         proto_sims = profile["prototypes"] @ target
@@ -193,6 +229,8 @@ class CrossID(AttributionModel):
     def evaluate_internal(self, query_df, target_df, df_name=None):
         if query_df.empty:
             raise ValueError("CROSS-ID requires at least one reference document.")
+        if self.profile_mode != "pooled" and not set(target_df["genre"]).issubset({"Article", "Tweet"}):
+            raise ValueError("Genre-aware CROSS-ID requires Article/Tweet target metadata.")
         overlap = set(query_df["id"].map(str)) & set(target_df["id"].map(str))
         if overlap:
             raise ValueError("Reference and target document IDs overlap; benchmark would leak data.")
@@ -203,7 +241,7 @@ class CrossID(AttributionModel):
         for _, row in target_df.iterrows():
             target = self._embedding_for_id(row["id"])
             scores = [
-                self._score_profile(target, profiles[author])
+                self._score_profile(target, profiles[author], row["genre"])
                 for author in author_ids
             ]
             all_scores.append(scores)

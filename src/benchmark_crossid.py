@@ -28,6 +28,8 @@ def parser():
     p.add_argument('--parameter-sets', nargs='+', default=['default', 'prototype_heavy'])
     p.add_argument('--reference-sets', nargs='+', choices=['Article', 'Tweet', 'Both'], default=['Article', 'Tweet', 'Both'])
     p.add_argument('--output', type=Path, default=ROOT / 'results/crossid_benchmark')
+    p.add_argument('--split', choices=['test', 'validation'], default='test')
+    p.add_argument('--selection', type=Path, help='Frozen validation selection; test only.')
     p.add_argument('--check', action='store_true', help='Validate inputs without scoring or writing results.')
     return p
 
@@ -47,20 +49,64 @@ def read_split(path):
 def preflight(args):
     queries = {genre: args.data_dir / 'query' / f'CrossNews_{genre}.csv'
                for genre in args.reference_sets}
-    target_path = args.data_dir / 'test/CrossNews.csv'
+    target_path = args.data_dir / args.split / 'CrossNews.csv'
     paths = [args.parameters, args.train_embeddings, args.test_embeddings, target_path, *queries.values()]
     missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         raise ValueError('Missing benchmark inputs:\n  ' + '\n  '.join(missing))
     configs = json.loads(args.parameters.read_text())
+    if args.parameter_sets == ['all']:
+        args.parameter_sets = list(configs)
+    args._selection = None
+    args._validation_protocol = None
+    if args.selection:
+        if args.split != 'test':
+            raise ValueError('--selection is allowed only for a test run.')
+        selection = json.loads(args.selection.read_text())
+        if selection.get('format') != 'crossid_validation_selection_v1':
+            raise ValueError('Unrecognized validation selection format.')
+        if selection.get('crossid_source_sha256') != digest(ROOT / 'src/attribution_models/crossid.py'):
+            raise ValueError('CROSS-ID source changed since validation; rerun validation.')
+        for reference in args.reference_sets:
+            if reference not in selection['selected']:
+                raise ValueError(f'No frozen validation selection for {reference}.')
+            chosen = selection['selected'][reference]
+            if configs.get(chosen['model']) != chosen['parameters']:
+                raise ValueError('Configuration changed since validation; rerun validation.')
+        args.parameter_sets = sorted({selection['selected'][r]['model'] for r in args.reference_sets})
+        args._selection = selection
+        paths.append(args.selection)
     for name in args.parameter_sets:
         if name not in configs:
             raise ValueError(f'Unknown parameter set: {name}')
+        if name == 'selma' or Path(name).name != name or name in {'.', '..'}:
+            raise ValueError(f'Invalid or reserved CROSS-ID parameter-set name: {name}')
+    if len(set(args.parameter_sets)) != len(args.parameter_sets):
+        raise ValueError('Duplicate CROSS-ID parameter-set names.')
     # Reuse the model loader for finite, dimension, and duplicate-ID validation.
     embeddings = CrossID._load_embeddings(args.train_embeddings, args.test_embeddings)
     train_ids = set(json.loads(args.train_embeddings.read_text()))
     test_ids = set(json.loads(args.test_embeddings.read_text()))
     target = read_split(target_path)
+    if args._selection and set(target['author']) & set(args._selection['validation_authors']):
+        raise ValueError('Validation and test author sets overlap.')
+    if args.split == 'validation':
+        protocol_path = args.data_dir / 'validation_protocol.json'
+        protocol = json.loads(protocol_path.read_text())
+        if protocol.get('role') != 'silver_validation':
+            raise ValueError('Validation requires a silver_validation protocol.')
+        if set(target['author']) != set(protocol['author_labels']):
+            raise ValueError('Validation target authors differ from the prepared protocol.')
+        if set(target['author']) & set(protocol['excluded_gold_authors']):
+            raise ValueError('Validation authors overlap with gold authors.')
+        for path in [target_path, *queries.values()]:
+            if protocol['files'].get(str(path.relative_to(args.data_dir))) != digest(path):
+                raise ValueError(f'Validation split changed after preparation: {path}')
+        genre_counts = target.groupby(['author', 'genre']).size().unstack(fill_value=0)
+        if set(genre_counts.columns) != {'Article', 'Tweet'} or not (genre_counts['Article'] == genre_counts['Tweet']).all():
+            raise ValueError('Validation requires equal target genre counts for every author.')
+        args._validation_protocol = protocol
+        paths.append(protocol_path)
     if not set(target['id']).issubset(test_ids):
         raise ValueError('Target IDs are missing from the test embedding file.')
     counts = {}
@@ -105,6 +151,10 @@ def run(args):
         commit, dirty = None, None
     manifest = {
         'status': 'running', 'scope': 'Phase 1, frozen embeddings, closed-world attribution',
+        'split_role': args.split,
+        'author_labels': sorted(read_split(target_path)['author'].unique().tolist()),
+        'validation_protocol': args._validation_protocol,
+        'frozen_validation_selection': args._selection,
         'commit': commit, 'working_tree_dirty': dirty, 'counts': counts,
         'inputs': {str(p.resolve()): digest(p) for p in inputs},
         'source_sha256': {str(p.relative_to(ROOT)): digest(p) for p in [
@@ -113,7 +163,8 @@ def run(args):
             ROOT / 'src/utils.py']},
         'versions': {p: importlib.metadata.version(p) for p in ['numpy', 'pandas', 'scikit-learn', 'scipy']},
         'tie_policy': 'descending score, ascending lexicographically mapped author ID',
-        'selection': 'Fixed configurations reported independently; no test-set selection.',
+        'selection': ('Frozen silver-validation selection tested against fixed SELMA.' if args._selection
+                      else 'Fixed configurations reported independently; no test-set selection.'),
         'baseline': 'Upstream SELMA: mean raw reference embeddings, negative cosine distance rounded to 4 decimals.',
         'parameters': {name: configs[name] for name in args.parameter_sets},
     }
@@ -122,7 +173,9 @@ def run(args):
     rows = []
     try:
         for genre, query_path in queries.items():
-            for name in ['selma', *args.parameter_sets]:
+            names = ([args._selection['selected'][genre]['model']]
+                     if args._selection else args.parameter_sets)
+            for name in ['selma', *names]:
                 params = dict(configs[name]) if name != 'selma' else {'name': 'selma'}
                 params.update(train_embedding_loc=str(args.train_embeddings.resolve()),
                               test_embedding_loc=str(args.test_embeddings.resolve()))
@@ -136,6 +189,13 @@ def run(args):
                 elapsed = time.perf_counter() - start
                 folder = Path(model.model_folder)
                 (folder / 'predictions.json').write_text(json.dumps({'predictions': predictions, 'author_list': authors}))
+                # Compact records are practical to commit for paired correctness
+                # analysis; full predictions also retain all candidate scores.
+                with (folder / 'prediction_ranks.csv').open('w', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=['id', 'genre', 'label', 'prediction', 'rank'])
+                    writer.writeheader()
+                    writer.writerows({key: prediction[key] for key in writer.fieldnames}
+                                     for prediction in predictions)
                 scores = {}
                 for target_genre in ['Overall', 'Article', 'Tweet']:
                     subset = [p for p in predictions if target_genre == 'Overall' or p['genre'] == target_genre]

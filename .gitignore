@@ -26,3 +26,4 @@ table_printing
 # CROSS-ID generated inputs and benchmark outputs
 selma_embeddings/
 results/
+crossid_validation_data/

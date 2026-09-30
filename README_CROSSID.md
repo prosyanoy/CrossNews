@@ -7,6 +7,9 @@ Scores combine top-k prototype cosine similarity, centroid cosine similarity,
 and top-k reference cosine similarity. It does not implement the Phase 2 trainable
 encoder or Phase 3 reranker described below.
 
+For genre-aware ablations, normalized-centroid/reference baselines, and independent
+silver validation, see [the ablation workflow](README_CROSSID_ABLATIONS.md).
+
 ## Setup
 
 Use Python 3.10+ and install the CPU scoring dependencies:
@@ -108,10 +111,12 @@ profile-cache invalidation, tie ranking, invalid inputs, save/load, the
 multi-configuration CLI, and the full benchmark output pipeline. Synthetic
 accuracy is not evidence of CrossNews performance.
 
-The CrossNews raw data was retrieved and attribution CSVs generated during this
-implementation. Full model accuracy has **not been measured**: SELMA embeddings
-are not included in the repository and were unavailable in the execution
-environment, which also had no CUDA GPU. See `CROSSID_BENCHMARK_STATUS.md`.
+The first completed gold benchmark is committed under `results/crossid_retry`.
+Its 500-author, 15,000-target run shows small top-1 gains for `prototype_heavy`
+over SELMA, with mixed changes in ranking metrics and target genres. The
+initial environment's missing-embedding record remains in
+`CROSSID_BENCHMARK_STATUS.md` for provenance. New ablation scores require the
+embedding files on the GPU machine; none are inferred from synthetic tests.
 
 ## Future phases (not implemented)
 
