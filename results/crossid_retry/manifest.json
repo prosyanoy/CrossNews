@@ -1,0 +1,71 @@
+{
+  "status": "completed",
+  "scope": "Phase 1, frozen embeddings, closed-world attribution",
+  "commit": "c3fe8eb7878800e5fce572eb420d6d9ae154628e",
+  "working_tree_dirty": false,
+  "counts": {
+    "authors": 500,
+    "targets": 15000,
+    "targets_by_genre": {
+      "Article": 7500,
+      "Tweet": 7500
+    },
+    "references": {
+      "Article": 15000,
+      "Tweet": 15000,
+      "Both": 15000
+    },
+    "embedding_dimensions": 4096
+  },
+  "inputs": {
+    "/workspace/cn/src/model_parameters/crossid.json": "30957ab0681b3c893d7e99ea1a60c2145631723b8b12077b6b85bf366bb81ed5",
+    "/workspace/cn/selma_embeddings/mistral/train.json": "9fb2b4fed2c83699dfaeeb5af1bde93d37db2feb8f5281befafbfb0cb642a944",
+    "/workspace/cn/selma_embeddings/mistral/test_prompt_taskonly.json": "ccdea3387d11e0c3d0c843995558e28d1bda016ea6f8bb3071bf5fb154263072",
+    "/workspace/cn/attribution_data/test/CrossNews.csv": "420953942952456c1ad6ecdc58800100219498c5174107c45ba58c64636aa169",
+    "/workspace/cn/attribution_data/query/CrossNews_Article.csv": "64f332f8df55e0935f3ae9c63adfe1556dbd306bde475e491eefa5c63ac23fb1",
+    "/workspace/cn/attribution_data/query/CrossNews_Tweet.csv": "9172e9f4f4b918c4b16aac818f2f6a41670abedcd49ad8f44167e2f189fc0010",
+    "/workspace/cn/attribution_data/query/CrossNews_Both.csv": "ecf1844506247812476c9253fe556606003665d3ceabb30d22d4b49562598e9c"
+  },
+  "source_sha256": {
+    "src/benchmark_crossid.py": "5d171dd966aae67735943da21fd84437e6ac303cf2e45e620aaa34c8354e5ec5",
+    "src/attribution_models/crossid.py": "48baa648d657881bff434c3ec1f6728691ec8d922751951a813d5c0a75dfcdde",
+    "src/attribution_models/selma.py": "11ab90510c883eb7ee03a068e72d7e8bad16973e7680639de6f11530805f8b81",
+    "src/attribution_models/attribution_model.py": "d281e7704765aa993e98bc0fd6eaa07b55ed1b8a1316c395c062c2c7e3e88eb6",
+    "src/utils.py": "0ac7c065b260340671f2e3eead59bcb916e98889f319222ab508971728fa5664"
+  },
+  "versions": {
+    "numpy": "2.4.0",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1"
+  },
+  "tie_policy": "descending score, ascending lexicographically mapped author ID",
+  "selection": "Fixed configurations reported independently; no test-set selection.",
+  "baseline": "Upstream SELMA: mean raw reference embeddings, negative cosine distance rounded to 4 decimals.",
+  "parameters": {
+    "default": {
+      "name": "crossid",
+      "train_embedding_loc": "selma_embeddings/mistral/train.json",
+      "test_embedding_loc": "selma_embeddings/mistral/test_prompt_taskonly.json",
+      "num_prototypes": 4,
+      "prototype_top_k": 2,
+      "reference_top_k": 4,
+      "prototype_weight": 0.55,
+      "centroid_weight": 0.2,
+      "reference_weight": 0.25,
+      "random_state": 1234
+    },
+    "prototype_heavy": {
+      "name": "crossid",
+      "train_embedding_loc": "selma_embeddings/mistral/train.json",
+      "test_embedding_loc": "selma_embeddings/mistral/test_prompt_taskonly.json",
+      "num_prototypes": 6,
+      "prototype_top_k": 2,
+      "reference_top_k": 6,
+      "prototype_weight": 0.7,
+      "centroid_weight": 0.1,
+      "reference_weight": 0.2,
+      "random_state": 1234
+    }
+  }
+}

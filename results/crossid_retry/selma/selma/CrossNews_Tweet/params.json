@@ -1,0 +1,5 @@
+{
+    "name": "selma",
+    "train_embedding_loc": "/workspace/cn/selma_embeddings/mistral/train.json",
+    "test_embedding_loc": "/workspace/cn/selma_embeddings/mistral/test_prompt_taskonly.json"
+}

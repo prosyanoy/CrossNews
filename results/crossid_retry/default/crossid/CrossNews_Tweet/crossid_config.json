@@ -1,0 +1,12 @@
+{
+  "name": "crossid",
+  "train_embedding_loc": "/workspace/cn/selma_embeddings/mistral/train.json",
+  "test_embedding_loc": "/workspace/cn/selma_embeddings/mistral/test_prompt_taskonly.json",
+  "num_prototypes": 4,
+  "prototype_top_k": 2,
+  "reference_top_k": 4,
+  "prototype_weight": 0.55,
+  "centroid_weight": 0.2,
+  "reference_weight": 0.25,
+  "random_state": 1234
+}
