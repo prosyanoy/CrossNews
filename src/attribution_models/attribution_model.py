@@ -26,14 +26,11 @@ class AttributionModel(ABC):
             
         self.author_to_author_id = {author: i for i, author in enumerate(author_list)}
         
-        def update_authors(row, author_to_author_id):
-            row['author'] = author_to_author_id[row['author']]
-            return row
-        
-        if hasattr(self, 'query_df'):
-            self.query_df = self.query_df.apply(lambda row: update_authors(row, self.author_to_author_id), axis=1)
+        # Replace the entire column so integer IDs get their own dtype.
+        # Mutating an all-text row fails with pandas 3's strict string dtype.
+        self.query_df['author'] = self.query_df['author'].map(self.author_to_author_id).astype('int64')
         if hasattr(self, 'target_df'):
-            self.target_df = self.target_df.apply(lambda row: update_authors(row, self.author_to_author_id), axis=1)
+            self.target_df['author'] = self.target_df['author'].map(self.author_to_author_id).astype('int64')
             
         if args.load:
             self.model_folder = args.load_folder

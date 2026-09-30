@@ -6,6 +6,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -51,6 +52,29 @@ class CrossIDTests(unittest.TestCase):
 
     def model(self, **overrides):
         return CrossID(self.args, self.params | overrides)
+
+    def test_author_mapping_with_string_extension_columns(self):
+        # All-text CSV rows use a strict string dtype in pandas 3. Exercise
+        # that representation explicitly so this also catches the bug on 2.x.
+        read_csv = pd.read_csv
+
+        def read_string_csv(*args, **kwargs):
+            return read_csv(*args, **kwargs).astype('string')
+
+        with patch('attribution_models.attribution_model.pd.read_csv',
+                   side_effect=read_string_csv):
+            model = self.model()
+
+        self.assertEqual(model.author_to_author_id, {'alice': 0, 'bob': 1})
+        for frame in [model.query_df, model.target_df]:
+            self.assertEqual(str(frame['author'].dtype), 'int64')
+            self.assertEqual(set(frame['author']), {0, 1})
+            self.assertEqual(str(frame['id'].dtype), 'string')
+            self.assertEqual(str(frame['genre'].dtype), 'string')
+        results, authors = model.evaluate()
+        self.assertEqual(authors, ['alice', 'bob'])
+        self.assertEqual([r['label'] for r in results], ['alice', 'alice', 'bob', 'bob'])
+        self.assertTrue(all(r['prediction'] == r['label'] for r in results))
 
     def test_scores_and_saved_configuration(self):
         model = self.model()
