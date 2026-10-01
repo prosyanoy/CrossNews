@@ -1,0 +1,9 @@
+{
+    "query_file": "/workspace/cn/attribution_data/query/CrossNews_Both.csv",
+    "target_file": "/workspace/cn/attribution_data/test/CrossNews.csv",
+    "train": true,
+    "test": true,
+    "load": false,
+    "silent": true,
+    "save_folder": "results/crossid_genre_ablation/centroid_only"
+}
