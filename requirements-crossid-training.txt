@@ -1,0 +1,5 @@
+# Install a suitable CPU/CUDA PyTorch build separately (torch>=2.2).
+-r requirements-crossid.txt
+transformers>=4.40,<5
+safetensors>=0.4
+# SELMA embedding generation additionally needs sentence-transformers.

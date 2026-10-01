@@ -27,3 +27,5 @@ table_printing
 selma_embeddings/
 results/
 crossid_validation_data/
+crossid_training_data/
+crossid_checkpoints/
