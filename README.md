@@ -50,3 +50,7 @@ To train embedding models, see `src/train_embedding.py`. To use SELMA, the embed
 
 See [CROSS-ID setup and benchmark instructions](README_CROSSID.md) for the
 training-free multi-prototype model and its comparison against SELMA.
+
+Trainable adapter, learned author bundles, candidate-conditioned reranking, and
+validation-fitted stylometry fusion are documented in
+[the Phase 2/3 workflow](README_CROSSID_LEARNING.md).

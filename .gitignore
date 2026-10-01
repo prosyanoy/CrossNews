@@ -27,3 +27,4 @@ table_printing
 selma_embeddings/
 results/
 crossid_validation_data/
+crossid_learning_data/

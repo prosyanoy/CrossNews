@@ -4,8 +4,8 @@ This implementation completes the existing **training-free Phase 1** integration
 It uses frozen SELMA document embeddings and represents each author with a
 normalized centroid, KMeans prototypes, and the full normalized reference bundle.
 Scores combine top-k prototype cosine similarity, centroid cosine similarity,
-and top-k reference cosine similarity. It does not implement the Phase 2 trainable
-encoder or Phase 3 reranker described below.
+and top-k reference cosine similarity. The trainable adapter and reranker are
+provided separately in [the Phase 2/3 workflow](README_CROSSID_LEARNING.md).
 
 For genre-aware ablations, normalized-centroid/reference baselines, and independent
 silver validation, see [the ablation workflow](README_CROSSID_ABLATIONS.md).
@@ -118,11 +118,13 @@ initial environment's missing-embedding record remains in
 `CROSSID_BENCHMARK_STATUS.md` for provenance. New ablation scores require the
 embedding files on the GPU machine; none are inferred from synthetic tests.
 
-## Future phases (not implemented)
+## Trainable phases
 
 Phase 2: train on the silver split with cross-genre positive pairs, same-topic
 hard negatives, topic/genre gradient-reversal heads, variable-size author
 bundles, and learned prototypes. Phase 3: multi-prototype retrieval followed by
 candidate-conditioned cross-encoder reranking and calibrated stylometry fusion.
-These require a specified training/validation protocol and separate empirical
-evaluation; they are not represented by the Phase 1 results.
+The first trainable implementation and its separate silver protocol are now in
+[the Phase 2/3 workflow](README_CROSSID_LEARNING.md). Phase 2 starts with a SELMA
+adapter; the SELMA backbone remains frozen. These phases are not represented by
+the Phase 1 results and have no real performance measurements yet.

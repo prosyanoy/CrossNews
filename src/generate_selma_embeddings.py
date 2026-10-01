@@ -11,6 +11,7 @@ options_parser.add_argument('--data-dir', type=Path, default=Path('attribution_d
 options_parser.add_argument('--output-dir', type=Path, default=Path('selma_embeddings/mistral'))
 options_parser.add_argument('--target-split', choices=['test', 'validation'], default='test')
 options_parser.add_argument('--batch-size', type=int, default=15)
+options_parser.add_argument('--input-csv', type=Path, help='Explicit document CSV for Phase 2/3 embedding views.')
 options, sys_args = options_parser.parse_known_args()
 if options.batch_size < 1:
     raise SystemExit('--batch-size must be positive.')
@@ -89,11 +90,13 @@ else:
 
     id_to_text = {} # id to text
 
-    if 'train' in sys_args:
+    if options.input_csv is not None:
+        df = pd.read_csv(options.input_csv, dtype={'id': str})
+    elif 'train' in sys_args:
         df = pd.concat([pd.read_csv(options.data_dir / f'query/CrossNews_{genre}.csv', dtype={'id': str})
                         for genre in ['Article', 'Tweet', 'Both']])
         
-    if 'test' in sys_args:
+    elif 'test' in sys_args:
         df = pd.read_csv(options.data_dir / options.target_split / 'CrossNews.csv', dtype={'id': str})
         
     df = df.drop_duplicates(subset='id', keep='first')

@@ -1,0 +1,6 @@
+# Install a PyTorch build appropriate for your CUDA runtime separately.
+-r requirements-crossid.txt
+torch>=2.2
+transformers>=4.44,<5
+sentencepiece>=0.2
+safetensors>=0.4
