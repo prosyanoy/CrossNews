@@ -1,0 +1,71 @@
+{
+  "status": "completed",
+  "role": "exploratory_gold_test",
+  "reference_set": "Both",
+  "authors": 500,
+  "targets": 15000,
+  "references": 15000,
+  "source_sha256": {
+    "attribution_models/crossid.py": "8a83ef4bd375951980edcf6bfed31a38e17d464ce36e681abcdc7f5b575e868f",
+    "benchmark_crossid.py": "220042691d00cc26e80b462ed118fc209435e19175dc3fc9b7dd7ab6955ffeaa",
+    "crossid_common.py": "56858665e16ff2c5eb67decdcb9cc282d0040f9d03103f9253d2b215cfd0c7dc",
+    "crossid_phase2.py": "cb8fe090cd498b3a6813eae6a7e9bc489a7df355a1cc4a7ec5e1dbe73648ebe7",
+    "crossid_phase3.py": "5e85ffb496c5ac8caaf5a81d9da7bcca74569b2579d00a46d21ccc06959c67ee",
+    "crossid_trained.py": "04ea3f15d2cb842119f50de5640ab259558882501bd77b5718df6504cdee860c",
+    "prepare_crossid_training.py": "6284250589eb5c345714d7ea6ff894aeddcf340ffd5e3d084140fd1fd266dc51"
+  },
+  "checkpoint_sha256": {
+    "crossid_checkpoints/phase2": "39951e1d311ba59fef7780037f1d398067bd56d5b6a4cca227c316191ccf0f2f"
+  },
+  "inputs": {
+    "/workspace/cn/attribution_data/query/CrossNews_Both.csv": "ecf1844506247812476c9253fe556606003665d3ceabb30d22d4b49562598e9c",
+    "/workspace/cn/attribution_data/test/CrossNews.csv": "420953942952456c1ad6ecdc58800100219498c5174107c45ba58c64636aa169",
+    "/workspace/cn/selma_embeddings/mistral/train.json": "9fb2b4fed2c83699dfaeeb5af1bde93d37db2feb8f5281befafbfb0cb642a944",
+    "/workspace/cn/selma_embeddings/mistral/test_prompt_taskonly.json": "ccdea3387d11e0c3d0c843995558e28d1bda016ea6f8bb3071bf5fb154263072"
+  },
+  "reference_target_text_overlap": {
+    "count": 27,
+    "hashes": [
+      "05608ecb0d4c8d8bfee43c888c749fb79d5ab6fe90d9d9cdc439cf94730f26e6",
+      "0636890f994103d606e03d8fc0fa8147a94c7710769e12552fecf9273fcd1184",
+      "18c09d9e90cf9ea8e15a1ecc67112080ccb16dbccebd038cbc9fbfabc805dff4",
+      "1f62096129bd5d4384b96c13018b7408ab56a258cad77a28903a65e023faaf18",
+      "41c75e339052a0477fe9ca3b91994b6d27fd6f11dfe9522ae6264b5ed6504743",
+      "4614cd6787cb14e305ed726ebccbbc046db63cd317ba2156597eab202e99c6a6",
+      "5162aad5cd0fc8504ce5579978757afd62531c51b43e97c83055335b98df1bb3",
+      "58859610df455cfcea1a91489dcc75f22fa867c2e4fb07b031571e04fd7f6f3f",
+      "5abaeea04615abc0819a978a71ba47dd92d0093797e9e7c003e17854e0d07c2a",
+      "5c7f771ccceb4b84295188c63fe81425a69e933cbe1b9559b6a9468dc9fedabc",
+      "66f6e817af1492ddc33b3face51d6f4db9f38b4b220dbdc4e48c955a96271346",
+      "7669520da4ea85e0ff43da22d6ebbdbffb5250baa5a150321068ead561244c19",
+      "7d93b8747e6dce253f9191dadb60a0e39e60f1550bd48d8091cac96b9f4e582d",
+      "7ffae314cc9ae39113840a7da89030bfa4a71a1f33b36aea2085c515c946c560",
+      "85a7dbf7a1bc2f7e5de23c23c353636949d9edc3d2ff662eeefd69142a7e8031",
+      "89ab7513129f29c63806705fa8cc0e2307da30c69ef5afa2307e94e1e2fab6bb",
+      "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+      "b21dc7a29cc4fdbf8bfad282bb41e75579930cfdb68166b1a1aaff3eb755a65b",
+      "b5e3f0e075ec991a46d50066131f995a1d2833cc1f0868188fe32c37e321ab21",
+      "c2e75fbed2f17da99f39471d80d4efbfd3fd2a9c1ee73d779aafaaeabc67d06a",
+      "cba162fbfbcfe49a1b740df3387cea330f73ce3f319395e2b5a0f7ddf716863e",
+      "d2eea0ebfe8f8b30b5d88dd578eff80d5a8a22d6f02ff947df87b99d631da3de",
+      "d9d17082368b7b92e3060eab0f847215a7ae6ded2ee706d2d5589bd22a5e2cc3",
+      "dfa6fe0a71680d60ed2323e44706110bbc5ef584963b1ca8d45ca829b5cf51c6",
+      "e17df1fe493e4387477300a64c2c4d18903e5937eb38db8784d5816c044f0da0",
+      "e513e02efd5a9682540146c1747f862f9926a06092d01ab3fa394ea5f0fcfc4c",
+      "f6e17987851f08f55c6ff944b985da461edfa52455a318457a3afbfd5d0711ea"
+    ],
+    "explicitly_allowed": true
+  },
+  "selection": "Frozen checkpoints and fusion; no fitting or configuration selection on test.",
+  "tie_policy": "Descending score, then lexicographically sorted author label.",
+  "scope": "Adapter training over frozen SELMA; no backbone fine-tuning.",
+  "versions": {
+    "torch": "2.5.1+cu124",
+    "numpy": "2.4.0",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1"
+  },
+  "commit": "59e22887fb3b8cc06ed3976634ee08d37b99ecfc",
+  "working_tree_dirty": true,
+  "elapsed_seconds": 226.28326813402236
+}
