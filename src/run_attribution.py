@@ -1,4 +1,6 @@
 from datetime import datetime
+from copy import copy
+from pathlib import Path
 import json
 import shutil
 import multiprocessing
@@ -27,6 +29,9 @@ def main(args):
     
     for parameter_set_name in args.parameter_sets:
         parameter_set = parameter_file[parameter_set_name]
+        model_args = copy(args)
+        if args.model == 'crossid' and not args.load:
+            model_args.save_folder = str(Path(args.save_folder) / parameter_set_name)
     
         if args.model == 'luar_aa':
             from attribution_models.luar_aa import LUAR_AA
@@ -43,9 +48,14 @@ def main(args):
         elif args.model == 'ppm_aa':
             from attribution_models.ppm_aa import PPM_AA
             model = PPM_AA(args, parameter_set)
+        elif args.model == 'crossid':
+            from attribution_models.crossid import CrossID
+            model = CrossID(model_args, parameter_set)
         elif args.model == 'selma':
             from attribution_models.selma import SELMA
             model = SELMA(args, parameter_set)
+        else:
+            raise ValueError(f"Unknown attribution model: {args.model}")
         
         debug_print(f"Created model (parameters {parameter_set_name}) at {model.model_folder}")
         
@@ -57,6 +67,15 @@ def main(args):
         if args.load:
             break
         
+    # No held-out validation split exists in the attribution interface.
+    # Report fixed CROSS-ID configurations independently; never select on test.
+    if args.model == 'crossid':
+        if args.test:
+            for model in models:
+                model.test_and_save()
+                debug_print(f'Saved Model {model.model_folder}.')
+        return
+
     best_model = models[0]
         
     if args.train and not args.load: # find best model on the eval dataset

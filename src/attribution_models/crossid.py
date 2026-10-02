@@ -33,6 +33,9 @@ class CrossID(AttributionModel):
     """
 
     def __init__(self, args, parameter_set):
+        if args.load:
+            with open(Path(args.load_folder) / "crossid_config.json", encoding="utf-8") as f:
+                parameter_set = json.load(f)
         super().__init__(args, parameter_set)
 
         self.train_embedding_loc = parameter_set["train_embedding_loc"]
@@ -48,7 +51,18 @@ class CrossID(AttributionModel):
         self.centroid_weight = float(parameter_set.get("centroid_weight", 0.20))
         self.reference_weight = float(parameter_set.get("reference_weight", 0.25))
 
+        weights = np.array([self.prototype_weight, self.centroid_weight,
+                            self.reference_weight], dtype=np.float64)
+        if not np.isfinite(weights).all() or (weights < 0).any() or weights.sum() <= 0:
+            raise ValueError("CROSS-ID weights must be finite, non-negative, and sum to > 0.")
+        if min(self.num_prototypes, self.prototype_top_k, self.reference_top_k) < 1:
+            raise ValueError("CROSS-ID prototype counts and top-k values must be positive.")
+        self._weights = weights / weights.sum()
+
         self.random_state = int(parameter_set.get("random_state", 1234))
+        self.profile_mode = parameter_set.get("profile_mode", "pooled")
+        if self.profile_mode not in {"pooled", "genre_prototypes", "genre_balanced", "genre_matched"}:
+            raise ValueError("Unknown CROSS-ID profile_mode.")
 
         self.id_to_embedding = self._load_embeddings(
             self.train_embedding_loc,
@@ -58,11 +72,23 @@ class CrossID(AttributionModel):
         self._author_profiles = None
         self._profile_signature = None
 
-    def _load_embeddings(self, *paths):
+    @staticmethod
+    def _load_embeddings(*paths):
         out = {}
         for path in paths:
             with open(path, "r", encoding="utf-8") as f:
-                out.update(json.load(f))
+                embeddings = json.load(f)
+            if not isinstance(embeddings, dict):
+                raise ValueError(f"Expected a document-id to embedding object in {path}.")
+            for key, value in embeddings.items():
+                vector = np.asarray(value, dtype=np.float32)
+                if vector.ndim != 1 or not vector.size or not np.isfinite(vector).all() or not np.isfinite(np.linalg.norm(vector)) or np.linalg.norm(vector) == 0:
+                    raise ValueError(f"Invalid embedding for document {key} in {path}.")
+                if out and len(vector) != len(next(iter(out.values()))):
+                    raise ValueError(f"Inconsistent embedding dimension for document {key}.")
+                if key in out and not np.array_equal(out[key], vector):
+                    raise ValueError(f"Conflicting embeddings for document {key}; reference and target IDs must not overlap.")
+                out[key] = vector
         return out
 
     def get_model_name(self):
@@ -80,8 +106,8 @@ class CrossID(AttributionModel):
             json.dump(self.parameter_set, f, indent=2)
 
     def load_model(self, folder):
-        # Embedding locations and hyperparameters are read from the model
-        # parameter file, as in SELMA. Nothing trainable is persisted yet.
+        # __init__ restores the saved configuration before initializing the base class.
+        # Profiles are rebuilt from the supplied reference documents.
         return None
 
     def _embedding_for_id(self, doc_id):
@@ -93,13 +119,16 @@ class CrossID(AttributionModel):
             )
         return np.asarray(self.id_to_embedding[key], dtype=np.float32)
 
-    def _make_profile(self, matrix):
+    def _make_profile(self, matrix, num_prototypes=None):
         matrix = _l2_normalize(matrix)
         n = matrix.shape[0]
 
         centroid = _l2_normalize(matrix.mean(axis=0))
 
-        k = min(max(self.num_prototypes, 1), n)
+        k = min(self.num_prototypes if num_prototypes is None else num_prototypes, n)
+        # Centroid/reference ablations do not need an unused KMeans fit.
+        if self.prototype_weight == 0:
+            k = 1
         if k == 1:
             prototypes = centroid[None, :]
         elif k == n:
@@ -122,22 +151,41 @@ class CrossID(AttributionModel):
 
     def _build_author_profiles(self, query_df):
         # Cache profiles for a given query dataframe shape/content signature.
-        signature = (
-            len(query_df),
-            tuple(sorted(map(int, set(query_df["author"])))),
-            tuple(map(str, query_df["id"].tolist()[:16])),
-        )
+        signature = tuple(zip(query_df["author"].map(int), query_df["id"].map(str),
+                              query_df["genre"].map(str)))
         if self._author_profiles is not None and signature == self._profile_signature:
             return self._author_profiles
 
         profiles = {}
         for author in sorted(set(query_df["author"])):
             author_rows = query_df[query_df["author"] == author]
-            matrix = np.stack(
-                [self._embedding_for_id(doc_id) for doc_id in author_rows["id"]],
-                axis=0,
-            )
-            profiles[int(author)] = self._make_profile(matrix)
+            if self.profile_mode == "pooled":
+                matrix = np.stack([self._embedding_for_id(doc_id) for doc_id in author_rows["id"]])
+                profiles[int(author)] = self._make_profile(matrix)
+            else:
+                genres = sorted(set(author_rows["genre"]))
+                if not set(genres).issubset({"Article", "Tweet"}):
+                    raise ValueError("Genre-aware CROSS-ID requires Article/Tweet metadata.")
+                if self.num_prototypes < len(genres):
+                    raise ValueError("Prototype budget must allow at least one per reference genre.")
+                # Same total budget as the pooled model. Odd remainders go to
+                # genres in sorted order; the shipped budgets (4/6) divide evenly.
+                budgets = [self.num_prototypes // len(genres) + (i < self.num_prototypes % len(genres))
+                           for i in range(len(genres))]
+                groups = {
+                    genre: self._make_profile(np.stack([
+                        self._embedding_for_id(doc_id)
+                        for doc_id in author_rows.loc[author_rows["genre"] == genre, "id"]]), budget)
+                    for genre, budget in zip(genres, budgets)}
+                if self.profile_mode == "genre_prototypes":
+                    # Isolate prototype allocation: preserve pooled centroid,
+                    # references, and top-k scoring, changing only KMeans groups.
+                    matrix = np.stack([self._embedding_for_id(doc_id) for doc_id in author_rows["id"]])
+                    profile = self._make_profile(matrix, num_prototypes=1)
+                    profile["prototypes"] = np.concatenate([g["prototypes"] for g in groups.values()])
+                    profiles[int(author)] = profile
+                else:
+                    profiles[int(author)] = {"genres": groups}
 
         self._author_profiles = profiles
         self._profile_signature = signature
@@ -152,7 +200,14 @@ class CrossID(AttributionModel):
         idx = np.argpartition(values, -k)[-k:]
         return float(values[idx].mean())
 
-    def _score_profile(self, target, profile):
+    def _score_profile(self, target, profile, target_genre=None):
+        if "genres" in profile:
+            groups = profile["genres"]
+            if self.profile_mode == "genre_matched" and target_genre in groups:
+                return self._score_profile(target, groups[target_genre])
+            # Equal genre weights, independent of reference-document counts.
+            # Single-genre cross-genre trials naturally fall back to that genre.
+            return float(np.mean([self._score_profile(target, group) for group in groups.values()]))
         target = _l2_normalize(target)
 
         proto_sims = profile["prototypes"] @ target
@@ -163,19 +218,7 @@ class CrossID(AttributionModel):
         ref_sims = profile["references"] @ target
         ref_score = self._topk_mean(ref_sims, self.reference_top_k)
 
-        weights = np.asarray(
-            [
-                self.prototype_weight,
-                self.centroid_weight,
-                self.reference_weight,
-            ],
-            dtype=np.float32,
-        )
-        if np.any(weights < 0):
-            raise ValueError("CROSS-ID mixture weights must be non-negative.")
-        if float(weights.sum()) == 0.0:
-            raise ValueError("At least one CROSS-ID mixture weight must be > 0.")
-        weights = weights / weights.sum()
+        weights = self._weights
 
         return float(
             weights[0] * proto_score
@@ -184,6 +227,13 @@ class CrossID(AttributionModel):
         )
 
     def evaluate_internal(self, query_df, target_df, df_name=None):
+        if query_df.empty:
+            raise ValueError("CROSS-ID requires at least one reference document.")
+        if self.profile_mode != "pooled" and not set(target_df["genre"]).issubset({"Article", "Tweet"}):
+            raise ValueError("Genre-aware CROSS-ID requires Article/Tweet target metadata.")
+        overlap = set(query_df["id"].map(str)) & set(target_df["id"].map(str))
+        if overlap:
+            raise ValueError("Reference and target document IDs overlap; benchmark would leak data.")
         profiles = self._build_author_profiles(query_df)
         author_ids = sorted(profiles.keys())
 
@@ -191,7 +241,7 @@ class CrossID(AttributionModel):
         for _, row in target_df.iterrows():
             target = self._embedding_for_id(row["id"])
             scores = [
-                self._score_profile(target, profiles[author])
+                self._score_profile(target, profiles[author], row["genre"])
                 for author in author_ids
             ]
             all_scores.append(scores)

@@ -45,3 +45,8 @@ python src/run_attribution.py \
 ```
 
 To train embedding models, see `src/train_embedding.py`. To use SELMA, the embeddings must be generated first. See `src/generate_selma_embeddings.py` for more details.
+
+## CROSS-ID
+
+See [CROSS-ID setup and benchmark instructions](README_CROSSID.md) for the
+training-free multi-prototype model and its comparison against SELMA.

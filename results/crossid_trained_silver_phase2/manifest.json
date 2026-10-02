@@ -1,0 +1,44 @@
+{
+  "status": "completed",
+  "role": "silver_test",
+  "reference_set": "Both",
+  "authors": 60,
+  "targets": 1800,
+  "references": 1800,
+  "source_sha256": {
+    "attribution_models/crossid.py": "8a83ef4bd375951980edcf6bfed31a38e17d464ce36e681abcdc7f5b575e868f",
+    "benchmark_crossid.py": "220042691d00cc26e80b462ed118fc209435e19175dc3fc9b7dd7ab6955ffeaa",
+    "crossid_common.py": "56858665e16ff2c5eb67decdcb9cc282d0040f9d03103f9253d2b215cfd0c7dc",
+    "crossid_phase2.py": "cb8fe090cd498b3a6813eae6a7e9bc489a7df355a1cc4a7ec5e1dbe73648ebe7",
+    "crossid_phase3.py": "5e85ffb496c5ac8caaf5a81d9da7bcca74569b2579d00a46d21ccc06959c67ee",
+    "crossid_trained.py": "04ea3f15d2cb842119f50de5640ab259558882501bd77b5718df6504cdee860c",
+    "prepare_crossid_training.py": "6284250589eb5c345714d7ea6ff894aeddcf340ffd5e3d084140fd1fd266dc51"
+  },
+  "checkpoint_sha256": {
+    "crossid_checkpoints/phase2": "39951e1d311ba59fef7780037f1d398067bd56d5b6a4cca227c316191ccf0f2f"
+  },
+  "inputs": {
+    "/workspace/cn/crossid_training_data/protocol.json": "7b88a1637f1b059cc4f7468b1c410e45f45502472e55fe73ce658640bafb3872",
+    "/workspace/cn/crossid_training_data/test/query/CrossNews_Both.csv": "9bd80cb14379892e0fb2d61a797b5343bf069f0244c6da6d8206d99342b1a367",
+    "/workspace/cn/crossid_training_data/test/test/CrossNews.csv": "711be6d856c19f702f40a4197432fa0007182ba772e8bd350c511ca5c2b7ba80",
+    "/workspace/cn/selma_embeddings/crossid_training/test/train.json": "20fd3b6b3095597b6b3982e2afe4829942e7ada3fceb274d76964835f080284f",
+    "/workspace/cn/selma_embeddings/crossid_training/test/test_prompt_taskonly.json": "e8c75fe912aafdcb1923c7dbfdac58c1ec61894e95e0ced63b057fd166e2e60c"
+  },
+  "reference_target_text_overlap": {
+    "count": 0,
+    "hashes": [],
+    "explicitly_allowed": false
+  },
+  "selection": "Frozen checkpoints and fusion; no fitting or configuration selection on test.",
+  "tie_policy": "Descending score, then lexicographically sorted author label.",
+  "scope": "Adapter training over frozen SELMA; no backbone fine-tuning.",
+  "versions": {
+    "torch": "2.5.1+cu124",
+    "numpy": "2.4.0",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1"
+  },
+  "commit": "59e22887fb3b8cc06ed3976634ee08d37b99ecfc",
+  "working_tree_dirty": true,
+  "elapsed_seconds": 8.212997230992187
+}

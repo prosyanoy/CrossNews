@@ -3,8 +3,18 @@ from tqdm import tqdm
 import json
 import sys
 import pandas as pd
+import argparse
+from pathlib import Path
 
-sys_args = sys.argv
+options_parser = argparse.ArgumentParser(add_help=False)
+options_parser.add_argument('--data-dir', type=Path, default=Path('attribution_data'))
+options_parser.add_argument('--output-dir', type=Path, default=Path('selma_embeddings/mistral'))
+options_parser.add_argument('--target-split', choices=['test', 'validation'], default='test')
+options_parser.add_argument('--batch-size', type=int, default=15)
+options, sys_args = options_parser.parse_known_args()
+if options.batch_size < 1:
+    raise SystemExit('--batch-size must be positive.')
+output_loc = str(options.output_dir)
 
 """
 To generate SELMA embeddings, you will need to run this file several times with different options.
@@ -31,7 +41,7 @@ If you modify any of the file locations, you will also need to modify the corres
 
 """
 
-if 'no_prompt' in sys_args:
+if 'train' in sys_args or 'no_prompt' in sys_args:
     TEST_PROMPT = ''
     prompt_name = 'no_prompt'
 elif 'test_prompt_taskonly' in sys_args:
@@ -44,13 +54,16 @@ elif 'test_prompt_lip' in sys_args:
     TEST_PROMPT = 'Instruct: Retrieve stylistically similar text. Analyze the writing styles of the input texts, disregarding the differences in topic and content. Reason based on linguistic features such as phrasal verbs, modal verbs, punctuation, rare words, affixes, quantities, humor, sarcasm, typographical errors, and misspellings.\nQuery:'
     prompt_name = 'test_prompt_lip'
 
+if 'prompt_name' not in globals():
+    raise SystemExit('Specify train, or test with a prompt such as test_prompt_taskonly.')
+
 print(prompt_name)
 
 if 'combine' in sys_args:
     if 'train' in sys_args:
-        partition_folder = f'selma_embeddings/mistral/train_partitions'
+        partition_folder = f'{output_loc}/train_partitions'
     else:
-        partition_folder = f'selma_embeddings/mistral/{prompt_name}_partitions'
+        partition_folder = f'{output_loc}/{prompt_name}_partitions'
     results = {}
     for file in tqdm(os.listdir(partition_folder)):
         file = os.path.join(partition_folder, file)
@@ -59,33 +72,29 @@ if 'combine' in sys_args:
         except:
             print(f'ERROR: could not load {file}')
     if 'train' in sys_args:
-        json_file = f'selma_embeddings/mistral/train.json'
+        json_file = f'{output_loc}/train.json'
         if os.path.exists(json_file):
             results.update(json.load(open(json_file, 'r')))
         json.dump(results, open(json_file, 'w'), indent=4)
     else:
-        json_file = f'selma_embeddings/mistral/{prompt_name}.json'
+        json_file = f'{output_loc}/{prompt_name}.json'
         if os.path.exists(json_file):
             results.update(json.load(open(json_file, 'r')))
         json.dump(results, open(json_file, 'w'), indent=4)
 else:
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer("intfloat/e5-mistral-7b-instruct").cuda()
-    output_loc = 'selma_embeddings/mistral'
 
     os.makedirs(output_loc, exist_ok=True)
 
     id_to_text = {} # id to text
 
     if 'train' in sys_args:
-        df = pd.concat([pd.read_csv('attribution_data/query/CrossNews_Article.csv'),
-                    pd.read_csv('attribution_data/query/CrossNews_Tweet.csv'),
-                    pd.read_csv('attribution_data/query/CrossNews_Both.csv'),
-                    ])
+        df = pd.concat([pd.read_csv(options.data_dir / f'query/CrossNews_{genre}.csv', dtype={'id': str})
+                        for genre in ['Article', 'Tweet', 'Both']])
         
     if 'test' in sys_args:
-        df = pd.concat([pd.read_csv('attribution_data/test/CrossNews.csv'),
-                        ])
+        df = pd.read_csv(options.data_dir / options.target_split / 'CrossNews.csv', dtype={'id': str})
         
     df = df.drop_duplicates(subset='id', keep='first')
     df = df.reset_index(drop=True)
@@ -100,7 +109,7 @@ else:
         all_ids.append(str(row['id']))
 
     ids, texts = [], []
-    batch_size = 15 # small enough to fit on a single A40, feel free to adjust size
+    batch_size = options.batch_size # default is the original A40 configuration
     encodings = {} # id to encoding
 
     for i in range(0, len(all_ids), batch_size):
